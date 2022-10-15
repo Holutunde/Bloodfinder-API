@@ -6,6 +6,7 @@ const formData = require('express-form-data')
 const app = express()
 const morgan = require('morgan')
 const connectDB = require('./database/db')
+const errorHandler = require('./middleware/errorHandler')
 const notFound = require('./middleware/notFound')
 
 const users = require('./server/routes/users')
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: false }))
 
 app.use('/bloodfinder/users', users)
 
+app.use(errorHandler)
 app.use(notFound)
 
 const port = process.env.PORT || 3000

@@ -1,6 +1,7 @@
 const User = require('../models/userSchema')
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
+const validator = require('email-validator')
 const sendMail = require('../../utils/sendMail')
 const generateToken = require('../../utils/generateToken')
 
@@ -21,34 +22,37 @@ const registerUser = async (req, res) => {
   }
 
   const newUser = await User.create({ ...req.body })
+  const response = await validator.validate(newUser.email)
+  console.log(response)
+  if (response) {
+    //Generate 20 bit activation code
+    crypto.randomBytes(20, function (err, buf) {
+      //Activation link
+      newUser.activeToken = buf.toString('hex')
 
-  //Generate 20 bit activation code
-  crypto.randomBytes(20, function (err, buf) {
-    //Activation link
-    newUser.activeToken = buf.toString('hex')
+      const link = `http://localhost:${process.env.PORT}/api/users/active/${newUser.activeToken}`
 
-    const link = `http://localhost:${process.env.PORT}/api/users/active/${newUser.activeToken}`
-
-    newUser.save(function (err, user) {
-      if (err) return next(err)
-      res.status(201).json({
-        success: true,
-        email: newUser.email,
-        username: newUser.username,
-        password: newUser.password,
-        msg: `User was registered successfully! Please check your email`,
-      })
-      sendMail.send({
-        to: newUser.email,
-        subject: 'Please confirm your account',
-        html: `<h2>Email Confirmation</h2>
-        <h4>Hello ${newUser.username}</h4>
-        <p>Thank you for joining BloodFinder. Please confirm your email by clicking on the following link</p>
-        <p>Please click <a href=${link}>here</a> to activate your account'</p>
-        </div>`,
+      newUser.save(function (err, user) {
+        if (err) return next(err)
+        res.status(201).json({
+          success: true,
+          email: newUser.email,
+          username: newUser.username,
+          password: newUser.password,
+          msg: `User was registered successfully! Please check your email`,
+        })
+        sendMail.send({
+          to: newUser.email,
+          subject: 'Please confirm your account',
+          html: `<h2>Email Confirmation</h2>
+          <h4>Hello ${newUser.username}</h4>
+          <p>Thank you for joining BloodFinder. Please confirm your email by clicking on the following link</p>
+          <p>Please click <a href=${link}>here</a> to activate your account'</p>
+          </div>`,
+        })
       })
     })
-  })
+  }
 }
 
 const activeToken = async (req, res) => {
