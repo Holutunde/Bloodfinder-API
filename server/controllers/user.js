@@ -23,7 +23,7 @@ const registerUser = async (req, res) => {
 
   const newUser = await User.create({ ...req.body })
   const response = await validator.validate(newUser.email)
-  console.log(response)
+
   if (response) {
     //Generate 20 bit activation code
     crypto.randomBytes(20, function (err, buf) {
@@ -109,50 +109,55 @@ const loginUser = async (req, res) => {
     return res.status(401).json('invalid email')
   }
   const confirmPassword = await logUser.confirmPassword(password)
-  console.log(confirmPassword)
-  if (logUser && confirmPassword) {
+  if (logUser.active && confirmPassword) {
     res.json({
       email: logUser.email,
       username: logUser.username,
       token: generateToken(logUser._id),
       password: logUser.password,
     })
+  } else {
+    res.json({
+      success: false,
+      msg: 'email is not activated',
+    })
   }
 }
 
-// const userProfile = async (req, res) => {
-//   const id = req.user._id
-//   const user = await User.findById(id)
+const forgotPassword = async (req, res) => {
+  const { email } = req.body
+  const user = await User.findOne({ email })
+  if (!user) {
+    return res.status(400).json(`user with this ${user} not found`)
+  }
+  const token = generateToken(user._id)
+  if (!token) {
+    return res.status(401).json('token cannot be verified')
+  }
+  res.status(200).json({ newpasswordToken: token })
+}
 
-//   if (user) {
-//     res.json(user)
-//   } else {
-//     res.status(404).json('User not found')
-//   }
-// }
+const changePassword = async (req, res) => {
+  const { newpassword, confirmpassword, token } = req.body
 
-// const updateUserProfile = async (req, res) => {
-//   const id = req.user._id
-
-//   const userUpdate = await User.findOneAndUpdate(
-//     { _id: id },
-//     { ...req.body },
-//     {
-//       new: true,
-//       runValidators: true,
-//     },
-//   )
-//   if (userUpdate) {
-//     res.status(200).json(`user with name ${userUpdate.name} updated`)
-//   } else {
-//     res.status(404).json('User not found')
-//   }
-//}
+  try {
+    if (newpassword != confirmpassword) {
+      return res.status(400).json('both passwords are not the same')
+    }
+    const { email } = jwt.verify(token, process.env.JWT_SECRET)
+    const user = await User.findOne({ email })
+    user.password = newpassword
+    user.save()
+    res.status(200).send('password changed')
+  } catch (err) {
+    return res.status(401).json('invalid Token')
+  }
+}
 
 module.exports = {
   registerUser,
   activeToken,
   loginUser,
-  // userProfile,
-  // updateUserProfile,
+  forgotPassword,
+  changePassword,
 }
