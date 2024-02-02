@@ -1,9 +1,11 @@
 const User = require("../models/userSchema");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const OTPAuth = require("otpauth");
 const validator = require("email-validator");
 const sendMail = require("../../utils/sendMail");
 const generateToken = require("../../utils/generateToken");
+const { encode } = require("hi-base32");
 
 const registerUser = async (req, res) => {
   const { email } = req.body;
@@ -12,7 +14,7 @@ const registerUser = async (req, res) => {
   if (user && user.active) {
     return res.status(400).json({
       success: false,
-      msg: "Entered email ID is already registered with us. Login to continue.",
+      msg: "Entered email already registered. Login to continue.",
     });
   } else if (user && !user.active) {
     return res.status(400).json({
@@ -105,7 +107,7 @@ const loginUser = async (req, res) => {
     return res.status(401).json("invalid email");
   }
 
-  const confirmPassword = await logUser.confirmPassword(password);
+  const isPasswwordConfirmmedd = await logUser.confirmPassword(password);
   if (!logUser.active) {
     res.status(401).json({
       success: false,
@@ -117,6 +119,7 @@ const loginUser = async (req, res) => {
       username: logUser.username,
       token: generateToken(logUser._id),
       password: logUser.password,
+      otp_enabled: logUser.otp_enabled,
     });
   }
 };
@@ -151,10 +154,88 @@ const changePassword = async (req, res) => {
   }
 };
 
+const generateRandomBase32 = () => {
+  const buffer = crypto.randomBytes(15);
+  const base32 = encode(buffer).replace(/=/g, "").substring(0, 24);
+  return buffer;
+};
+
+const nodemailer = require("nodemailer");
+
+const generateOTP = async (req, res) => {
+  const email = req.body.email;
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: `User with ${email} does not exist`,
+    });
+  }
+
+  const base32_secret = generateRandomBase32();
+
+  const totp = new OTPAuth.TOTP({
+    issuer: "2FA Test",
+    label: `2FA Test: @${user.username}`,
+    algorithm: "SHA1",
+    digits: 6,
+    period: 15,
+    secret: base32_secret,
+  });
+
+  const otp = totp.generate();
+
+  // Assuming you have a configured nodemailer transporter
+  const transporter = nodemailer.createTransport({
+    // Your nodemailer configuration goes here
+
+    host: "smtp.gmail.com",
+    port: 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASSWORD,
+    },
+  });
+
+  const mailOptions = {
+    from: process.env.FROM_MAIL,
+    to: user.email,
+    subject: "Your OTP for 2FA",
+    text: `Your OTP for 2FA is: ${otp}`,
+  };
+
+  // Send the email
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
+      console.error(error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP via email",
+      });
+    }
+
+    user.otp_auth_url = totp.toString();
+    user.otp_base32 = base32_secret;
+
+    user.save();
+
+    res.status(200).json({
+      email: user.email,
+      username: user.username,
+      otpauth_url: user.otp_auth_url,
+      base32_secret: user.otp_base32,
+      message: "OTP sent successfully via email",
+    });
+  });
+};
+
 module.exports = {
   registerUser,
   activeToken,
   loginUser,
   forgotPassword,
   changePassword,
+  generateOTP,
 };
