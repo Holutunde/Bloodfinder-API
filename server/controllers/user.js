@@ -181,53 +181,88 @@ const generateOTP = async (req, res) => {
     label: `2FA Test: @${user.username}`,
     algorithm: "SHA1",
     digits: 6,
-    period: 15,
-    secret: base32_secret,
+    period: 60,
+    secret: "NB2W45DFOIZA",
   });
 
   const otp = totp.generate();
 
+  user.otp_auth_url = totp.toString();
+  user.otp_base32 = base32_secret;
+
   // Assuming you have a configured nodemailer transporter
   const transporter = nodemailer.createTransport({
-    // Your nodemailer configuration goes here
-
     host: "smtp.gmail.com",
     port: 465,
+    secure: true,
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASSWORD,
     },
   });
 
-  const mailOptions = {
+  await transporter.sendMail({
     from: process.env.FROM_MAIL,
     to: user.email,
     subject: "Your OTP for 2FA",
     text: `Your OTP for 2FA is: ${otp}`,
-  };
+  });
 
-  // Send the email
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error(error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to send OTP via email",
-      });
-    }
+  await user.save();
 
-    user.otp_auth_url = totp.toString();
-    user.otp_base32 = base32_secret;
+  res.status(200).json({
+    email: user.email,
+    username: user.username,
+    otpauth_url: user.otp_auth_url,
+    base32_secret: user.otp_base32,
+    message: "OTP sent successfully via email",
+  });
+};
 
-    user.save();
+const verifyOTP = async (req, res) => {
+  const { email } = req.body;
+  const token = req.params.token;
+  const user = await User.findOne({ email });
 
-    res.status(200).json({
-      email: user.email,
-      username: user.username,
-      otpauth_url: user.otp_auth_url,
-      base32_secret: user.otp_base32,
-      message: "OTP sent successfully via email",
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: `User with ${email} does not exist`,
     });
+  }
+
+  const totp = new OTPAuth.TOTP({
+    issuer: "2FA Test",
+    label: `2FA Test: @${user.username}`,
+    algorithm: "SHA1",
+    digits: 6,
+    period: 60,
+    secret: "NB2W45DFOIZA",
+  });
+  console.log("totp", totp);
+
+  const delta = totp.validate({ token });
+  console.log("delta", delta);
+
+  if (delta === null) {
+    return res.status(401).json({
+      status: "fail",
+      message: "Invalid OTP",
+    });
+  }
+
+  user.otp_enabled = true;
+  user.otp_verified = true;
+  await user.save();
+
+  res.status(200).json({
+    otp_verified: true,
+    user: {
+      id: user.id,
+      name: user.username,
+      email: user.email,
+      otp_enabled: user.otp_enabled,
+    },
   });
 };
 
@@ -238,4 +273,5 @@ module.exports = {
   forgotPassword,
   changePassword,
   generateOTP,
+  verifyOTP,
 };
