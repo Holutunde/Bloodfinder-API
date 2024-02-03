@@ -154,13 +154,19 @@ const changePassword = async (req, res) => {
   }
 };
 
-const generateRandomBase32 = () => {
-  const buffer = crypto.randomBytes(15);
-  const base32 = encode(buffer).replace(/=/g, "").substring(0, 24);
-  return buffer;
-};
+const generateRandomBase32 = (length) => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-const nodemailer = require("nodemailer");
+  let result = "";
+  const buffer = crypto.randomBytes(length);
+
+  for (let i = 0; i < length; i++) {
+    const byte = buffer[i] % chars.length;
+    result += chars.charAt(byte);
+  }
+
+  return result;
+};
 
 const generateOTP = async (req, res) => {
   const email = req.body.email;
@@ -174,7 +180,8 @@ const generateOTP = async (req, res) => {
     });
   }
 
-  const base32_secret = generateRandomBase32();
+  const base32_secret = generateRandomBase32(6);
+  console.log(base32_secret);
 
   const totp = new OTPAuth.TOTP({
     issuer: "2FA Test",
@@ -182,7 +189,7 @@ const generateOTP = async (req, res) => {
     algorithm: "SHA1",
     digits: 6,
     period: 60,
-    secret: "NB2W45DFOIZA",
+    secret: base32_secret,
   });
 
   const otp = totp.generate();
@@ -190,19 +197,7 @@ const generateOTP = async (req, res) => {
   user.otp_auth_url = totp.toString();
   user.otp_base32 = base32_secret;
 
-  // Assuming you have a configured nodemailer transporter
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASSWORD,
-    },
-  });
-
-  await transporter.sendMail({
-    from: process.env.FROM_MAIL,
+  sendMail.send({
     to: user.email,
     subject: "Your OTP for 2FA",
     text: `Your OTP for 2FA is: ${otp}`,
@@ -237,7 +232,7 @@ const verifyOTP = async (req, res) => {
     algorithm: "SHA1",
     digits: 6,
     period: 60,
-    secret: "NB2W45DFOIZA",
+    secret: user.otp_base32,
   });
   console.log("totp", totp);
 
