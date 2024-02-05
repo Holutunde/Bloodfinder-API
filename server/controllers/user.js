@@ -5,7 +5,6 @@ const OTPAuth = require("otpauth");
 const validator = require("email-validator");
 const sendMail = require("../../utils/sendMail");
 const generateToken = require("../../utils/generateToken");
-const { encode } = require("hi-base32");
 
 const registerUser = async (req, res) => {
   const { email } = req.body;
@@ -137,6 +136,21 @@ const forgotPassword = async (req, res) => {
   res.status(200).json({ newpasswordToken: token });
 };
 
+const isEmailValid = async (req, res) => {
+  const { email } = req.body;
+
+  const isUserRegistered = await User.findOne({ email });
+
+  if (!isUserRegistered) {
+    return res.status(401).json("invalid email");
+  } else {
+    res.status(200).json({
+      success: true,
+      user: isUserRegistered,
+    });
+  }
+};
+
 const changePassword = async (req, res) => {
   const { newpassword, confirmpassword, token } = req.body;
 
@@ -169,8 +183,8 @@ const generateRandomBase32 = (length) => {
 };
 
 const generateOTP = async (req, res) => {
-  const email = req.body.email;
-
+  const { email } = req.body;
+  console.log(email);
   const user = await User.findOne({ email });
 
   if (!user) {
@@ -208,6 +222,7 @@ const generateOTP = async (req, res) => {
   res.status(200).json({
     email: user.email,
     username: user.username,
+    otp: otp,
     otpauth_url: user.otp_auth_url,
     base32_secret: user.otp_base32,
     message: "OTP sent successfully via email",
@@ -217,6 +232,8 @@ const generateOTP = async (req, res) => {
 const verifyOTP = async (req, res) => {
   const { email } = req.body;
   const token = req.params.token;
+
+  console.log(token);
   const user = await User.findOne({ email });
 
   if (!user) {
@@ -265,6 +282,7 @@ module.exports = {
   registerUser,
   activeToken,
   loginUser,
+  isEmailValid,
   forgotPassword,
   changePassword,
   generateOTP,
