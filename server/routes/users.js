@@ -9,11 +9,13 @@ const {
   isEmailValid,
   generateOTP,
   verifyOTP,
+  changePassword,
 } = require("../controllers/user");
 
 router.route("/register").post(registerUser);
 router.route("/login").post(loginUser);
 router.route("/resetpassword").post(isEmailValid);
+router.route("/changepassword").post(changePassword);
 
 router.route("/otp/generate").post(generateOTP);
 router.route("/otp/verify/:token").post(verifyOTP);

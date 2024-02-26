@@ -152,15 +152,16 @@ const isEmailValid = async (req, res) => {
 };
 
 const changePassword = async (req, res) => {
-  const { newpassword, confirmpassword } = req.body;
+  const { email, newpassword, confirmpassword } = req.body;
   if (newpassword != confirmpassword) {
     return res.status(400).json("both passwords are not the same");
   }
-  const { email } = jwt.verify(token, process.env.JWT_SECRET);
   const user = await User.findOne({ email });
   user.password = newpassword;
   user.save();
-  res.status(200).json("password successfully changed");
+  res
+    .status(200)
+    .json({ success: true, user, msg: "password successfully changed" });
 };
 
 const generateRandomBase32 = (length) => {
